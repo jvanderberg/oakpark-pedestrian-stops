@@ -50,7 +50,18 @@ function App() {
           <div>
             <h1 className="text-2xl font-bold">Pedestrian Stops Dashboard</h1>
             <p className="text-sm text-muted-foreground">
-              Oak Park PD — Field Contact Data (Apr 2024 to Dec 2025)
+              Oak Park PD — Field Contact Data (Jan 2015 to Dec 2025)
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Pre-2024 data source:{" "}
+              <a
+                href="https://docs.google.com/spreadsheets/d/1aFVlaOqM4NeOZuB5DGw9v5xIequI-lY_JmmGN3Jr_UM/edit?gid=23324634#gid=23324634"
+                target="_blank"
+                rel="noreferrer"
+                className="underline underline-offset-2 hover:text-foreground"
+              >
+                Freedom to Thrive
+              </a>
             </p>
           </div>
           <button

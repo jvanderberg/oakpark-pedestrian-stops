@@ -4,9 +4,17 @@
 
 Public dashboard and data repo for Oak Park PD pedestrian stop records.
 
+Pre-2024 records are published with credit to Freedom to Thrive.
+
 - Primary store: `pedestrian-stops.db` (SQLite)
 - Main table: `stops`
 - Frontend: React + Vite in `dashboard/`
+
+## Data Sources
+
+- Freedom to Thrive Google Sheet (legacy records through 2020): https://docs.google.com/spreadsheets/d/1aFVlaOqM4NeOZuB5DGw9v5xIequI-lY_JmmGN3Jr_UM/edit?gid=23324634#gid=23324634
+- Oak Park PD quarterly PDF reports (Q2-Q4 2024) ingested via OCR/extraction tooling in this repo
+- Oak Park PD monthly records for 2025 (from existing workbook/database materials in this repo)
 
 ## Quick Start
 

@@ -55,8 +55,21 @@ function SelectContent({
   align = "center",
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Content>) {
+  const [portalContainer, setPortalContainer] = React.useState<HTMLElement | null>(null)
+
+  React.useEffect(() => {
+    const updatePortalContainer = () => {
+      const element = document.fullscreenElement
+      setPortalContainer(element instanceof HTMLElement ? element : null)
+    }
+
+    updatePortalContainer()
+    document.addEventListener("fullscreenchange", updatePortalContainer)
+    return () => document.removeEventListener("fullscreenchange", updatePortalContainer)
+  }, [])
+
   return (
-    <SelectPrimitive.Portal>
+    <SelectPrimitive.Portal container={portalContainer ?? undefined}>
       <SelectPrimitive.Content
         data-slot="select-content"
         className={cn(

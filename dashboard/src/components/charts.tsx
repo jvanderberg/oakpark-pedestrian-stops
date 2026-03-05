@@ -1,5 +1,6 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -7,8 +8,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import type { Stop } from "@/types";
 import { getHour, getDayOfWeek, normalizeSex } from "@/types";
+import { Maximize2, Minimize2 } from "lucide-react";
 import type { PieLabelRenderProps } from "recharts";
 import {
   BarChart,
@@ -68,6 +71,14 @@ const REASON_BREAKDOWN_OPTIONS = [
   { value: "cfs_vs_oi", label: "Initiation" },
 ] as const;
 
+const CATEGORY_DIMENSION_OPTIONS = [
+  { value: "reason", label: "Reason for Stop" },
+  { value: "race", label: "Race/Ethnicity" },
+  { value: "sex", label: "Sex" },
+  { value: "arrest", label: "Arrest" },
+  { value: "cfs_vs_oi", label: "Initiation" },
+] as const;
+
 const AGE_BREAKDOWN_OPTIONS = [
   { value: "none", label: "None" },
   { value: "race", label: "Race" },
@@ -91,15 +102,20 @@ const AGE_BUCKETS = [
 
 type BreakdownDimension = "race" | "sex" | "reason" | "arrest" | "cfs_vs_oi";
 type MonthBreakdownKey = "none" | BreakdownDimension;
-type ReasonBreakdownKey = "none" | Exclude<BreakdownDimension, "reason">;
+type CategoryDimension = BreakdownDimension;
+type CategoryBreakdownKey = "none" | BreakdownDimension;
 type AgeBreakdownKey = "none" | BreakdownDimension;
+type ChartId = "month" | "race" | "reason" | "age" | "initiation" | "sex" | "hour" | "day";
+type PieRadius = number | string;
 
 const MONTH_BREAKDOWN_PARAM = "month_breakdown";
-const REASON_BREAKDOWN_PARAM = "reason_breakdown";
+const CATEGORY_DIMENSION_PARAM = "category_dimension";
+const CATEGORY_BREAKDOWN_PARAM = "category_breakdown";
 const AGE_BREAKDOWN_PARAM = "age_breakdown";
 const MONTH_PERCENT_PARAM = "month_percent";
-const REASON_PERCENT_PARAM = "reason_percent";
+const CATEGORY_PERCENT_PARAM = "category_percent";
 const AGE_PERCENT_PARAM = "age_percent";
+const FULLSCREEN_CHART_HEIGHT_CLASS = "h-[calc(100vh-11rem)] min-h-[420px]";
 
 const TOOLTIP_PROPS = {
   contentStyle: {
@@ -226,7 +242,86 @@ function PercentToggle({
   );
 }
 
+function FullscreenToggle({
+  expanded,
+  onClick,
+}: {
+  expanded: boolean;
+  onClick: () => void;
+}) {
+  const Icon = expanded ? Minimize2 : Maximize2;
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="icon-xs"
+      onClick={onClick}
+      aria-label={expanded ? "Exit full screen chart" : "View chart full screen"}
+      title={expanded ? "Exit full screen" : "Full screen"}
+    >
+      <Icon />
+    </Button>
+  );
+}
+
+function chartElementId(id: ChartId): string {
+  return `chart-card-${id}`;
+}
+
 export function Charts({ stops }: { stops: Stop[] }) {
+  const [fullscreenChartId, setFullscreenChartId] = useState<ChartId | null>(null);
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      const element = document.fullscreenElement as HTMLElement | null;
+      const id = element?.dataset.chartId as ChartId | undefined;
+      setFullscreenChartId(id ?? null);
+    };
+
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
+
+  const isChartFullscreen = useCallback(
+    (id: ChartId) => fullscreenChartId === id,
+    [fullscreenChartId]
+  );
+
+  const chartHeightClass = useCallback(
+    (id: ChartId, defaultClass: string) =>
+      isChartFullscreen(id) ? FULLSCREEN_CHART_HEIGHT_CLASS : defaultClass,
+    [isChartFullscreen]
+  );
+
+  const pieOuterRadius = useCallback(
+    (id: ChartId, defaultRadius: number): PieRadius =>
+      isChartFullscreen(id) ? "38%" : defaultRadius,
+    [isChartFullscreen]
+  );
+
+  const toggleChartFullscreen = useCallback(
+    async (id: ChartId) => {
+      const element = document.getElementById(chartElementId(id));
+      if (!(element instanceof HTMLElement) || typeof element.requestFullscreen !== "function") {
+        return;
+      }
+
+      try {
+        if (document.fullscreenElement === element) {
+          await document.exitFullscreen();
+          return;
+        }
+        if (document.fullscreenElement) {
+          await document.exitFullscreen();
+        }
+        await element.requestFullscreen();
+      } catch {
+        // Browser blocked fullscreen or API unavailable.
+      }
+    },
+    []
+  );
+
   const updateQueryParam = useCallback((key: string, value: string | null) => {
     const params = new URLSearchParams(window.location.search);
     if (value === null) params.delete(key);
@@ -255,16 +350,43 @@ export function Charts({ stops }: { stops: Stop[] }) {
     [updateQueryParam]
   );
 
-  const reasonBreakdown = useMemo<ReasonBreakdownKey>(() => {
+  const categoryDimension = useMemo<CategoryDimension>(() => {
     const params = new URLSearchParams(window.location.search);
-    const value = params.get(REASON_BREAKDOWN_PARAM) as ReasonBreakdownKey | null;
-    const valid = REASON_BREAKDOWN_OPTIONS.some((opt) => opt.value === value);
-    return valid && value ? value : "none";
+    const value = params.get(CATEGORY_DIMENSION_PARAM) as CategoryDimension | null;
+    const valid = CATEGORY_DIMENSION_OPTIONS.some((opt) => opt.value === value);
+    return valid && value ? value : "reason";
   }, [window.location.search]);
 
-  const setReasonBreakdown = useCallback(
-    (next: ReasonBreakdownKey) => {
-      updateQueryParam(REASON_BREAKDOWN_PARAM, next === "none" ? null : next);
+  const setCategoryDimension = useCallback(
+    (next: CategoryDimension) => {
+      updateQueryParam(CATEGORY_DIMENSION_PARAM, next);
+      updateQueryParam(CATEGORY_BREAKDOWN_PARAM, null);
+      updateQueryParam(CATEGORY_PERCENT_PARAM, null);
+    },
+    [updateQueryParam]
+  );
+
+  const categoryBreakdownOptions = useMemo(
+    () => [
+      { value: "none", label: "None" as const },
+      ...REASON_BREAKDOWN_OPTIONS.filter(
+        (opt) => opt.value !== "none" && opt.value !== categoryDimension
+      ),
+    ],
+    [categoryDimension]
+  );
+
+  const categoryBreakdown = useMemo<CategoryBreakdownKey>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const value = params.get(CATEGORY_BREAKDOWN_PARAM) as CategoryBreakdownKey | null;
+    const valid = categoryBreakdownOptions.some((opt) => opt.value === value);
+    return valid && value ? value : "none";
+  }, [window.location.search, categoryBreakdownOptions]);
+
+  const setCategoryBreakdown = useCallback(
+    (next: CategoryBreakdownKey) => {
+      updateQueryParam(CATEGORY_BREAKDOWN_PARAM, next === "none" ? null : next);
+      if (next === "none") updateQueryParam(CATEGORY_PERCENT_PARAM, null);
     },
     [updateQueryParam]
   );
@@ -288,9 +410,9 @@ export function Charts({ stops }: { stops: Stop[] }) {
     return params.get(MONTH_PERCENT_PARAM) === "1";
   }, [window.location.search]);
 
-  const reasonPercent = useMemo(() => {
+  const categoryPercent = useMemo(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get(REASON_PERCENT_PARAM) === "1";
+    return params.get(CATEGORY_PERCENT_PARAM) === "1";
   }, [window.location.search]);
 
   const agePercent = useMemo(() => {
@@ -303,9 +425,9 @@ export function Charts({ stops }: { stops: Stop[] }) {
     [updateQueryParam]
   );
 
-  const setReasonPercent = useCallback(
+  const setCategoryPercent = useCallback(
     (checked: boolean) =>
-      updateQueryParam(REASON_PERCENT_PARAM, checked ? "1" : null),
+      updateQueryParam(CATEGORY_PERCENT_PARAM, checked ? "1" : null),
     [updateQueryParam]
   );
 
@@ -316,31 +438,38 @@ export function Charts({ stops }: { stops: Stop[] }) {
 
   const byRace = countBy(stops, (s) => s.race_ethnicity_group);
 
-  const byReasonRows = useMemo(() => {
-    const reasons = countBy(stops, (s) => s.reason).map((r) => r.name);
-    const rows: Array<Record<string, string | number>> = reasons.map((reason) => ({
-      name: reason,
+  const byCategoryRows = useMemo(() => {
+    const categories = countBy(stops, (s) => breakdownValue(s, categoryDimension)).map(
+      (r) => r.name
+    );
+    const rows: Array<Record<string, string | number>> = categories.map((category) => ({
+      name: category,
       total: 0,
     }));
-    const rowByReason = new Map(rows.map((r) => [r.name as string, r]));
+    const rowByCategory = new Map(rows.map((r) => [r.name as string, r]));
     const breakdownTotals: Record<string, number> = {};
 
     for (const stop of stops) {
-      const row = rowByReason.get(stop.reason);
+      const primaryKey = breakdownValue(stop, categoryDimension);
+      const row = rowByCategory.get(primaryKey);
       if (!row) continue;
       row.total = Number(row.total) + 1;
-      if (reasonBreakdown === "none") continue;
-      const key = breakdownValue(stop, reasonBreakdown);
+      if (categoryBreakdown === "none") continue;
+      const key = breakdownValue(stop, categoryBreakdown);
       row[key] = Number(row[key] ?? 0) + 1;
       breakdownTotals[key] = (breakdownTotals[key] ?? 0) + 1;
     }
 
-    const categories = Object.entries(breakdownTotals)
+    const breakdownCategories = Object.entries(breakdownTotals)
       .sort((a, b) => b[1] - a[1])
       .map(([key]) => key);
 
-    return { rows, categories, percentRows: withPercentFields(rows, categories) };
-  }, [stops, reasonBreakdown]);
+    return {
+      rows,
+      categories: breakdownCategories,
+      percentRows: withPercentFields(rows, breakdownCategories),
+    };
+  }, [stops, categoryDimension, categoryBreakdown]);
 
   const byMonthRows = useMemo(() => {
     const months = Array.from(new Set(stops.map((s) => s.source_sheet))).sort(
@@ -414,12 +543,19 @@ export function Charts({ stops }: { stops: Stop[] }) {
   const bySex = countBy(stops, (s) => normalizeSex(s.sex));
 
   const monthPercentMode = monthBreakdown !== "none" && monthPercent;
-  const reasonPercentMode = reasonBreakdown !== "none" && reasonPercent;
+  const categoryPercentMode = categoryBreakdown !== "none" && categoryPercent;
   const agePercentMode = ageBreakdown !== "none" && agePercent;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <Card>
+      <Card
+        id={chartElementId("month")}
+        data-chart-id="month"
+        className={cn(
+          isChartFullscreen("month") &&
+            "h-screen w-screen max-w-none rounded-none border-none py-4"
+        )}
+      >
         <CardHeader>
           <div className="flex items-center justify-between gap-3">
             <CardTitle className="text-sm">Stops by Month</CardTitle>
@@ -445,85 +581,132 @@ export function Charts({ stops }: { stops: Stop[] }) {
                 disabled={monthBreakdown === "none"}
                 onChange={setMonthPercent}
               />
+              <FullscreenToggle
+                expanded={isChartFullscreen("month")}
+                onClick={() => void toggleChartFullscreen("month")}
+              />
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={monthPercentMode ? byMonthRows.percentRows : byMonthRows.rows}>
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} tickFormatter={monthTickLabel} />
-              <YAxis
-                domain={monthPercentMode ? [0, 100] : undefined}
-                tickFormatter={(v: number) =>
-                  monthPercentMode ? `${Math.round(v)}%` : `${v}`
-                }
-              />
-              <Tooltip
-                {...TOOLTIP_PROPS}
-                formatter={(value: number | string | undefined) =>
-                  formatTooltipValue(value, monthPercentMode)
-                }
-              />
-              {monthBreakdown === "none" ? (
-                <Bar dataKey="total" fill="var(--chart-1)" radius={[4, 4, 0, 0]} />
-              ) : (
-                <>
-                  {byMonthRows.categories.map((category, idx) => (
-                    <Bar
-                      key={category}
-                      dataKey={monthPercentMode ? `pct__${category}` : category}
-                      stackId="month-breakdown"
-                      fill={colorForIndex(idx)}
-                    />
-                  ))}
-                  <Legend />
-                </>
-              )}
-            </BarChart>
-          </ResponsiveContainer>
+          <div className={chartHeightClass("month", "h-[300px]")}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={monthPercentMode ? byMonthRows.percentRows : byMonthRows.rows}>
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} tickFormatter={monthTickLabel} />
+                <YAxis
+                  domain={monthPercentMode ? [0, 100] : undefined}
+                  tickFormatter={(v: number) =>
+                    monthPercentMode ? `${Math.round(v)}%` : `${v}`
+                  }
+                />
+                <Tooltip
+                  {...TOOLTIP_PROPS}
+                  formatter={(value: number | string | undefined) =>
+                    formatTooltipValue(value, monthPercentMode)
+                  }
+                />
+                {monthBreakdown === "none" ? (
+                  <Bar dataKey="total" fill="var(--chart-1)" radius={[4, 4, 0, 0]} />
+                ) : (
+                  <>
+                    {byMonthRows.categories.map((category, idx) => (
+                      <Bar
+                        key={category}
+                        dataKey={monthPercentMode ? `pct__${category}` : category}
+                        name={category}
+                        stackId="month-breakdown"
+                        fill={colorForIndex(idx)}
+                      />
+                    ))}
+                    <Legend />
+                  </>
+                )}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Race/Ethnicity</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={byRace}
-                cx="50%"
-                cy="50%"
-                outerRadius={100}
-                dataKey="value"
-                label={pieLabel}
-              >
-                {byRace.map((_, i) => (
-                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip {...TOOLTIP_PROPS} />
-            </PieChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
-
-      <Card className="md:col-span-2">
+      <Card
+        id={chartElementId("race")}
+        data-chart-id="race"
+        className={cn(
+          isChartFullscreen("race") &&
+            "h-screen w-screen max-w-none rounded-none border-none py-4"
+        )}
+      >
         <CardHeader>
           <div className="flex items-center justify-between gap-3">
-            <CardTitle className="text-sm">Reason for Stop</CardTitle>
+            <CardTitle className="text-sm">Race/Ethnicity</CardTitle>
+            <FullscreenToggle
+              expanded={isChartFullscreen("race")}
+              onClick={() => void toggleChartFullscreen("race")}
+            />
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className={chartHeightClass("race", "h-[300px]")}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={byRace}
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={pieOuterRadius("race", 100)}
+                  dataKey="value"
+                  label={pieLabel}
+                >
+                  {byRace.map((_, i) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip {...TOOLTIP_PROPS} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card
+        id={chartElementId("reason")}
+        data-chart-id="reason"
+        className={cn(
+          "md:col-span-2",
+          isChartFullscreen("reason") &&
+            "h-screen w-screen max-w-none rounded-none border-none py-4"
+        )}
+      >
+        <CardHeader>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-sm">Stops by</CardTitle>
+              <Select
+                value={categoryDimension}
+                onValueChange={(v) => setCategoryDimension(v as CategoryDimension)}
+              >
+                <SelectTrigger size="sm" className="w-[180px]">
+                  <SelectValue placeholder="Reason for Stop" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORY_DIMENSION_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">Breakdown</span>
               <Select
-                value={reasonBreakdown}
-                onValueChange={(v) => setReasonBreakdown(v as ReasonBreakdownKey)}
+                value={categoryBreakdown}
+                onValueChange={(v) => setCategoryBreakdown(v as CategoryBreakdownKey)}
               >
                 <SelectTrigger size="sm" className="w-[140px]">
                   <SelectValue placeholder="None" />
                 </SelectTrigger>
                 <SelectContent>
-                  {REASON_BREAKDOWN_OPTIONS.map((opt) => (
+                  {categoryBreakdownOptions.map((opt) => (
                     <SelectItem key={opt.value} value={opt.value}>
                       {opt.label}
                     </SelectItem>
@@ -531,54 +714,69 @@ export function Charts({ stops }: { stops: Stop[] }) {
                 </SelectContent>
               </Select>
               <PercentToggle
-                checked={reasonPercent}
-                disabled={reasonBreakdown === "none"}
-                onChange={setReasonPercent}
+                checked={categoryPercent}
+                disabled={categoryBreakdown === "none"}
+                onChange={setCategoryPercent}
+              />
+              <FullscreenToggle
+                expanded={isChartFullscreen("reason")}
+                onClick={() => void toggleChartFullscreen("reason")}
               />
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart
-              data={reasonPercentMode ? byReasonRows.percentRows : byReasonRows.rows}
-              layout="vertical"
-            >
-              <XAxis
-                type="number"
-                domain={reasonPercentMode ? [0, 100] : undefined}
-                tickFormatter={(v: number) =>
-                  reasonPercentMode ? `${Math.round(v)}%` : `${v}`
-                }
-              />
-              <YAxis type="category" dataKey="name" width={180} tick={{ fontSize: 11 }} />
-              <Tooltip
-                {...TOOLTIP_PROPS}
-                formatter={(value: number | string | undefined) =>
-                  formatTooltipValue(value, reasonPercentMode)
-                }
-              />
-              {reasonBreakdown === "none" ? (
-                <Bar dataKey="total" fill="var(--chart-2)" radius={[0, 4, 4, 0]} />
-              ) : (
-                <>
-                  {byReasonRows.categories.map((category, idx) => (
-                    <Bar
-                      key={category}
-                      dataKey={reasonPercentMode ? `pct__${category}` : category}
-                      stackId="reason-breakdown"
-                      fill={colorForIndex(idx)}
-                    />
-                  ))}
-                  <Legend />
-                </>
-              )}
-            </BarChart>
-          </ResponsiveContainer>
+          <div className={chartHeightClass("reason", "h-[300px]")}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={categoryPercentMode ? byCategoryRows.percentRows : byCategoryRows.rows}
+                layout="vertical"
+              >
+                <XAxis
+                  type="number"
+                  domain={categoryPercentMode ? [0, 100] : undefined}
+                  tickFormatter={(v: number) =>
+                    categoryPercentMode ? `${Math.round(v)}%` : `${v}`
+                  }
+                />
+                <YAxis type="category" dataKey="name" width={180} tick={{ fontSize: 11 }} />
+                <Tooltip
+                  {...TOOLTIP_PROPS}
+                  formatter={(value: number | string | undefined) =>
+                    formatTooltipValue(value, categoryPercentMode)
+                  }
+                />
+                {categoryBreakdown === "none" ? (
+                  <Bar dataKey="total" fill="var(--chart-2)" radius={[0, 4, 4, 0]} />
+                ) : (
+                  <>
+                    {byCategoryRows.categories.map((category, idx) => (
+                      <Bar
+                        key={category}
+                        dataKey={categoryPercentMode ? `pct__${category}` : category}
+                        name={category}
+                        stackId="reason-breakdown"
+                        fill={colorForIndex(idx)}
+                      />
+                    ))}
+                    <Legend />
+                  </>
+                )}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </CardContent>
       </Card>
 
-      <Card className="md:col-span-2">
+      <Card
+        id={chartElementId("age")}
+        data-chart-id="age"
+        className={cn(
+          "md:col-span-2",
+          isChartFullscreen("age") &&
+            "h-screen w-screen max-w-none rounded-none border-none py-4"
+        )}
+      >
         <CardHeader>
           <div className="flex items-center justify-between gap-3">
             <CardTitle className="text-sm">Age Distribution</CardTitle>
@@ -604,124 +802,191 @@ export function Charts({ stops }: { stops: Stop[] }) {
                 disabled={ageBreakdown === "none"}
                 onChange={setAgePercent}
               />
+              <FullscreenToggle
+                expanded={isChartFullscreen("age")}
+                onClick={() => void toggleChartFullscreen("age")}
+              />
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={agePercentMode ? byAgeRows.percentRows : byAgeRows.rows}>
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-              <YAxis
-                domain={agePercentMode ? [0, 100] : undefined}
-                tickFormatter={(v: number) => (agePercentMode ? `${Math.round(v)}%` : `${v}`)}
-              />
-              <Tooltip
-                {...TOOLTIP_PROPS}
-                formatter={(value: number | string | undefined) =>
-                  formatTooltipValue(value, agePercentMode)
-                }
-              />
-              {ageBreakdown === "none" ? (
-                <Bar dataKey="total" fill="var(--chart-3)" radius={[4, 4, 0, 0]} />
-              ) : (
-                <>
-                  {byAgeRows.categories.map((category, idx) => (
-                    <Bar
-                      key={category}
-                      dataKey={agePercentMode ? `pct__${category}` : category}
-                      stackId="age-breakdown"
-                      fill={colorForIndex(idx)}
-                    />
+          <div className={chartHeightClass("age", "h-[280px]")}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={agePercentMode ? byAgeRows.percentRows : byAgeRows.rows}>
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis
+                  domain={agePercentMode ? [0, 100] : undefined}
+                  tickFormatter={(v: number) => (agePercentMode ? `${Math.round(v)}%` : `${v}`)}
+                />
+                <Tooltip
+                  {...TOOLTIP_PROPS}
+                  formatter={(value: number | string | undefined) =>
+                    formatTooltipValue(value, agePercentMode)
+                  }
+                />
+                {ageBreakdown === "none" ? (
+                  <Bar dataKey="total" fill="var(--chart-3)" radius={[4, 4, 0, 0]} />
+                ) : (
+                  <>
+                    {byAgeRows.categories.map((category, idx) => (
+                      <Bar
+                        key={category}
+                        dataKey={agePercentMode ? `pct__${category}` : category}
+                        name={category}
+                        stackId="age-breakdown"
+                        fill={colorForIndex(idx)}
+                      />
+                    ))}
+                    <Legend />
+                  </>
+                )}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card
+        id={chartElementId("initiation")}
+        data-chart-id="initiation"
+        className={cn(
+          isChartFullscreen("initiation") &&
+            "h-screen w-screen max-w-none rounded-none border-none py-4"
+        )}
+      >
+        <CardHeader>
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle className="text-sm">Initiation</CardTitle>
+            <FullscreenToggle
+              expanded={isChartFullscreen("initiation")}
+              onClick={() => void toggleChartFullscreen("initiation")}
+            />
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className={chartHeightClass("initiation", "h-[250px]")}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={byCfsOi}
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={pieOuterRadius("initiation", 80)}
+                  dataKey="value"
+                  label={pieLabel}
+                >
+                  {byCfsOi.map((_, i) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
                   ))}
-                  <Legend />
-                </>
-              )}
-            </BarChart>
-          </ResponsiveContainer>
+                </Pie>
+                <Legend />
+                <Tooltip {...TOOLTIP_PROPS} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
         </CardContent>
       </Card>
 
-      <Card>
+      <Card
+        id={chartElementId("sex")}
+        data-chart-id="sex"
+        className={cn(
+          isChartFullscreen("sex") &&
+            "h-screen w-screen max-w-none rounded-none border-none py-4"
+        )}
+      >
         <CardHeader>
-          <CardTitle className="text-sm">Initiation</CardTitle>
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle className="text-sm">Sex</CardTitle>
+            <FullscreenToggle
+              expanded={isChartFullscreen("sex")}
+              onClick={() => void toggleChartFullscreen("sex")}
+            />
+          </div>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={250}>
-            <PieChart>
-              <Pie
-                data={byCfsOi}
-                cx="50%"
-                cy="50%"
-                outerRadius={80}
-                dataKey="value"
-                label={pieLabel}
-              >
-                {byCfsOi.map((_, i) => (
-                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                ))}
-              </Pie>
-              <Legend />
-              <Tooltip {...TOOLTIP_PROPS} />
-            </PieChart>
-          </ResponsiveContainer>
+          <div className={chartHeightClass("sex", "h-[250px]")}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={bySex}
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={pieOuterRadius("sex", 80)}
+                  dataKey="value"
+                  label={pieLabel}
+                >
+                  {bySex.map((_, i) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Legend />
+                <Tooltip {...TOOLTIP_PROPS} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
         </CardContent>
       </Card>
 
-      <Card>
+      <Card
+        id={chartElementId("hour")}
+        data-chart-id="hour"
+        className={cn(
+          isChartFullscreen("hour") &&
+            "h-screen w-screen max-w-none rounded-none border-none py-4"
+        )}
+      >
         <CardHeader>
-          <CardTitle className="text-sm">Sex</CardTitle>
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle className="text-sm">Hour of Day</CardTitle>
+            <FullscreenToggle
+              expanded={isChartFullscreen("hour")}
+              onClick={() => void toggleChartFullscreen("hour")}
+            />
+          </div>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={250}>
-            <PieChart>
-              <Pie
-                data={bySex}
-                cx="50%"
-                cy="50%"
-                outerRadius={80}
-                dataKey="value"
-                label={pieLabel}
-              >
-                {bySex.map((_, i) => (
-                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                ))}
-              </Pie>
-              <Legend />
-              <Tooltip {...TOOLTIP_PROPS} />
-            </PieChart>
-          </ResponsiveContainer>
+          <div className={chartHeightClass("hour", "h-[250px]")}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={byHour}>
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={1} />
+                <YAxis />
+                <Tooltip {...TOOLTIP_PROPS} />
+                <Bar dataKey="value" fill="var(--chart-4)" radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </CardContent>
       </Card>
 
-      <Card>
+      <Card
+        id={chartElementId("day")}
+        data-chart-id="day"
+        className={cn(
+          isChartFullscreen("day") &&
+            "h-screen w-screen max-w-none rounded-none border-none py-4"
+        )}
+      >
         <CardHeader>
-          <CardTitle className="text-sm">Hour of Day</CardTitle>
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle className="text-sm">Day of Week</CardTitle>
+            <FullscreenToggle
+              expanded={isChartFullscreen("day")}
+              onClick={() => void toggleChartFullscreen("day")}
+            />
+          </div>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={byHour}>
-              <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={1} />
-              <YAxis />
-              <Tooltip {...TOOLTIP_PROPS} />
-              <Bar dataKey="value" fill="var(--chart-4)" radius={[3, 3, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Day of Week</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={byDay}>
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-              <YAxis />
-              <Tooltip {...TOOLTIP_PROPS} />
-              <Bar dataKey="value" fill="var(--chart-5)" radius={[3, 3, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <div className={chartHeightClass("day", "h-[250px]")}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={byDay}>
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis />
+                <Tooltip {...TOOLTIP_PROPS} />
+                <Bar dataKey="value" fill="var(--chart-5)" radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </CardContent>
       </Card>
     </div>

@@ -32,15 +32,19 @@ function parseFilters(search: string): Filters {
   return filters;
 }
 
-function filtersToSearch(filters: Filters): string {
-  const params = new URLSearchParams();
+function filtersToSearch(filters: Filters, currentSearch: string): string {
+  // Keep non-filter params (chart settings, etc.) intact when filters change.
+  const params = new URLSearchParams(currentSearch);
+  for (const key of FILTER_KEYS) {
+    params.delete(key);
+  }
   for (const key of FILTER_KEYS) {
     if (filters[key].length > 0) {
       params.set(key, filters[key].map(encodeURIComponent).join(","));
     }
   }
-  const str = params.toString();
-  return str ? `?${str}` : "";
+  const next = params.toString();
+  return next ? `?${next}` : "";
 }
 
 export function useFilters() {
@@ -52,7 +56,7 @@ export function useFilters() {
   );
 
   const setFilters = useCallback((next: Filters) => {
-    const search = filtersToSearch(next);
+    const search = filtersToSearch(next, window.location.search);
     window.history.pushState(null, "", search || window.location.pathname);
     // Force re-render by dispatching popstate
     window.dispatchEvent(new PopStateEvent("popstate"));
