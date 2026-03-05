@@ -3,6 +3,20 @@ import type { Filters } from "@/types";
 import { FILTER_KEYS } from "@/types";
 
 const DEFAULT_YEAR = "2025";
+const MONTH_CODES = new Set([
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+]);
 
 const EMPTY_FILTERS: Filters = {
   year: [DEFAULT_YEAR],
@@ -23,7 +37,14 @@ function parseFilters(search: string): Filters {
   for (const key of FILTER_KEYS) {
     const val = params.get(key);
     if (val) {
-      filters[key] = val.split(",").map(decodeURIComponent);
+      const decoded = val.split(",").map(decodeURIComponent);
+      filters[key] =
+        key === "month"
+          ? decoded
+              .map((value) => value.trim().slice(0, 3))
+              .map((value) => value.charAt(0).toUpperCase() + value.slice(1).toLowerCase())
+              .filter((value) => MONTH_CODES.has(value))
+          : decoded;
     }
   }
   if (!params.has("year")) {

@@ -54,6 +54,20 @@ export const FILTER_LABELS: Record<keyof Filters, string> = {
 };
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTH_NAMES = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
 
 export function getYear(stop: Stop): string {
   return stop.fc_date.slice(0, 4);
@@ -66,6 +80,13 @@ export function getHour(stop: Stop): string {
 export function getDayOfWeek(stop: Stop): string {
   const d = new Date(stop.fc_date);
   return DAY_NAMES[d.getDay()];
+}
+
+export function getMonth(stop: Stop): string {
+  const sheetPrefix = stop.source_sheet.match(/^([A-Za-z]{3})\b/)?.[1];
+  if (sheetPrefix && MONTH_NAMES.includes(sheetPrefix)) return sheetPrefix;
+  const d = new Date(stop.fc_date);
+  return MONTH_NAMES[d.getMonth()] ?? "";
 }
 
 export function normalizeSex(value: string | null | undefined): string {
@@ -92,7 +113,7 @@ export function stopField(stop: Stop, key: keyof Filters): string {
     case "juvenile":
       return stop.juvenile;
     case "month":
-      return stop.source_sheet;
+      return getMonth(stop);
     case "hour":
       return getHour(stop);
     case "day":

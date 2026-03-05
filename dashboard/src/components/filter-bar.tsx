@@ -18,13 +18,32 @@ interface FilterBarProps {
   hasActiveFilters: boolean;
 }
 
+const MONTH_ORDER: Record<string, number> = {
+  Jan: 1,
+  Feb: 2,
+  Mar: 3,
+  Apr: 4,
+  May: 5,
+  Jun: 6,
+  Jul: 7,
+  Aug: 8,
+  Sep: 9,
+  Oct: 10,
+  Nov: 11,
+  Dec: 12,
+};
+
 function uniqueValues(stops: Stop[], key: keyof Filters): string[] {
   const set = new Set<string>();
   for (const s of stops) {
     const v = stopField(s, key);
     if (v) set.add(v);
   }
-  return Array.from(set).sort();
+  const values = Array.from(set);
+  if (key === "month") {
+    return values.sort((a, b) => (MONTH_ORDER[a] ?? 99) - (MONTH_ORDER[b] ?? 99));
+  }
+  return values.sort();
 }
 
 function summarize(selected: string[], total: number): string {
