@@ -20,6 +20,8 @@ type SortDir = "asc" | "desc";
 const ROW_HEIGHT = 42;
 const VIEWPORT_HEIGHT = 560;
 const OVERSCAN = 10;
+const TABLE_GRID_COLUMNS =
+  "155px 85px 70px 85px 180px 220px 90px 180px 300px";
 
 function csvEscape(value: unknown): string {
   const str = String(value ?? "");
@@ -156,8 +158,11 @@ export function StopsTable({ stops }: { stops: Stop[] }) {
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
-          <div className="min-w-[1050px]">
-            <div className="grid grid-cols-[155px_85px_70px_85px_180px_220px_90px_180px] border-b bg-muted/40 text-xs font-medium">
+          <div className="min-w-[1365px]">
+            <div
+              className="grid border-b bg-muted/40 text-xs font-medium"
+              style={{ gridTemplateColumns: TABLE_GRID_COLUMNS }}
+            >
               <button
                 className="flex items-center gap-1 px-2 py-2 text-left"
                 onClick={() => onSort("fc_date")}
@@ -207,6 +212,7 @@ export function StopsTable({ stops }: { stops: Stop[] }) {
               >
                 Type <SortIcon active={sortKey === "cfs_vs_oi"} dir={sortDir} />
               </button>
+              <div className="px-2 py-2 text-left">Narrative</div>
             </div>
 
             <div
@@ -226,8 +232,8 @@ export function StopsTable({ stops }: { stops: Stop[] }) {
                   {visibleRows.map((s) => (
                     <div
                       key={s.id}
-                      className="grid grid-cols-[155px_85px_70px_85px_180px_220px_90px_180px] border-b text-sm hover:bg-muted/30"
-                      style={{ height: ROW_HEIGHT }}
+                      className="grid border-b text-sm hover:bg-muted/30"
+                      style={{ gridTemplateColumns: TABLE_GRID_COLUMNS, height: ROW_HEIGHT }}
                     >
                       <div className="truncate px-2 py-2.5">{s.fc_date.split("T")[0]}</div>
                       <div className="truncate px-2 py-2.5">{s.fc_hour.slice(0, 5)}</div>
@@ -242,6 +248,12 @@ export function StopsTable({ stops }: { stops: Stop[] }) {
                       </div>
                       <div className="truncate px-2 py-2.5">
                         <Badge variant="outline">{s.cfs_vs_oi}</Badge>
+                      </div>
+                      <div
+                        className="truncate px-2 py-2.5"
+                        title={s.narrative || ""}
+                      >
+                        {s.narrative || "—"}
                       </div>
                     </div>
                   ))}
