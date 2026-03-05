@@ -1,0 +1,23 @@
+# Python env/cache
+.venv/
+__pycache__/
+
+# Dashboard dependencies/build cache
+dashboard/node_modules/
+dashboard/.vite/
+
+# OCR/temp artifacts
+ocr_q3/
+ocr_q4/
+ocr_memo/
+q3_p*.png
+q4_p*.png
+q3p*.png
+q3p*.ocr.txt
+
+# Office temp
+~$*.xlsx
+
+# Local backups
+*.bak
+*.bak-*
