@@ -33,6 +33,16 @@ const MONTH_ORDER: Record<string, number> = {
   Dec: 12,
 };
 
+const DAY_ORDER: Record<string, number> = {
+  Sun: 1,
+  Mon: 2,
+  Tue: 3,
+  Wed: 4,
+  Thu: 5,
+  Fri: 6,
+  Sat: 7,
+};
+
 function uniqueValues(stops: Stop[], key: keyof Filters): string[] {
   const set = new Set<string>();
   for (const s of stops) {
@@ -42,6 +52,9 @@ function uniqueValues(stops: Stop[], key: keyof Filters): string[] {
   const values = Array.from(set);
   if (key === "month") {
     return values.sort((a, b) => (MONTH_ORDER[a] ?? 99) - (MONTH_ORDER[b] ?? 99));
+  }
+  if (key === "day") {
+    return values.sort((a, b) => (DAY_ORDER[a] ?? 99) - (DAY_ORDER[b] ?? 99));
   }
   return values.sort();
 }
