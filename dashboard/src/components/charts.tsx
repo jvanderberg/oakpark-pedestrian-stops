@@ -101,6 +101,17 @@ const MONTH_PERCENT_PARAM = "month_percent";
 const REASON_PERCENT_PARAM = "reason_percent";
 const AGE_PERCENT_PARAM = "age_percent";
 
+const TOOLTIP_PROPS = {
+  contentStyle: {
+    backgroundColor: "var(--card)",
+    border: "1px solid var(--border)",
+    borderRadius: "0.5rem",
+    color: "var(--foreground)",
+  },
+  labelStyle: { color: "var(--foreground)" },
+  itemStyle: { color: "var(--foreground)" },
+} as const;
+
 function countBy(stops: Stop[], accessor: (s: Stop) => string) {
   const counts: Record<string, number> = {};
   for (const s of stops) {
@@ -448,6 +459,7 @@ export function Charts({ stops }: { stops: Stop[] }) {
                 }
               />
               <Tooltip
+                {...TOOLTIP_PROPS}
                 formatter={(value: number | string | undefined) =>
                   formatTooltipValue(value, monthPercentMode)
                 }
@@ -491,7 +503,7 @@ export function Charts({ stops }: { stops: Stop[] }) {
                   <Cell key={i} fill={COLORS[i % COLORS.length]} />
                 ))}
               </Pie>
-              <Tooltip />
+              <Tooltip {...TOOLTIP_PROPS} />
             </PieChart>
           </ResponsiveContainer>
         </CardContent>
@@ -541,6 +553,7 @@ export function Charts({ stops }: { stops: Stop[] }) {
               />
               <YAxis type="category" dataKey="name" width={180} tick={{ fontSize: 11 }} />
               <Tooltip
+                {...TOOLTIP_PROPS}
                 formatter={(value: number | string | undefined) =>
                   formatTooltipValue(value, reasonPercentMode)
                 }
@@ -603,6 +616,7 @@ export function Charts({ stops }: { stops: Stop[] }) {
                 tickFormatter={(v: number) => (agePercentMode ? `${Math.round(v)}%` : `${v}`)}
               />
               <Tooltip
+                {...TOOLTIP_PROPS}
                 formatter={(value: number | string | undefined) =>
                   formatTooltipValue(value, agePercentMode)
                 }
@@ -647,7 +661,7 @@ export function Charts({ stops }: { stops: Stop[] }) {
                 ))}
               </Pie>
               <Legend />
-              <Tooltip />
+              <Tooltip {...TOOLTIP_PROPS} />
             </PieChart>
           </ResponsiveContainer>
         </CardContent>
@@ -673,7 +687,7 @@ export function Charts({ stops }: { stops: Stop[] }) {
                 ))}
               </Pie>
               <Legend />
-              <Tooltip />
+              <Tooltip {...TOOLTIP_PROPS} />
             </PieChart>
           </ResponsiveContainer>
         </CardContent>
@@ -688,7 +702,7 @@ export function Charts({ stops }: { stops: Stop[] }) {
             <BarChart data={byHour}>
               <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={1} />
               <YAxis />
-              <Tooltip />
+              <Tooltip {...TOOLTIP_PROPS} />
               <Bar dataKey="value" fill="var(--chart-4)" radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -704,7 +718,7 @@ export function Charts({ stops }: { stops: Stop[] }) {
             <BarChart data={byDay}>
               <XAxis dataKey="name" tick={{ fontSize: 11 }} />
               <YAxis />
-              <Tooltip />
+              <Tooltip {...TOOLTIP_PROPS} />
               <Bar dataKey="value" fill="var(--chart-5)" radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
